@@ -53,8 +53,9 @@ def normalize_xys(xys):
             dx_sum += temp_dx
             dy_sum += temp_dy
     sigma = np.sqrt(dx_sum / len_sum)
+
     if sigma == 0:
-        sigma = np.sqrt(dy_sum / len_sum)
+        sigma = np.sqrt(dx_sum / len_sum)
     xys[:, 0], xys[:, 1] = (xys[:, 0] - mux) / sigma, (xys[:, 1] - muy) / sigma
     return xys
 
@@ -65,6 +66,8 @@ description: Rendering offline character images by connecting coordinate points
 
 
 def coords_render(coordinates, split, width, height, thickness, board=5):
+    # 传递拷贝，避免影响外部坐标。不能是拷贝，一定要修改，不然外面坐标会乱掉。。。
+    # coordinates = np.copy(temp_coordinates)
     canvas_w = width
     canvas_h = height
     board_w = board
@@ -78,14 +81,16 @@ def coords_render(coordinates, split, width, height, thickness, board=5):
     min_y = 635535
     max_x = -1
     max_y = -1
-
+    # 这里是在计算绝对坐标
     coordinates[:, 0] = np.cumsum(coordinates[:, 0])
     coordinates[:, 1] = np.cumsum(coordinates[:, 1])
     if split:
         ids = np.where(coordinates[:, -1] == 1)[0]
         if len(ids) < 1:  ### if not exist [0, 0, 1]
+            # 说明没有多余的坐标点，直接寻找笔划的分割点即可
             ids = np.where(coordinates[:, 3] == 1)[0] + 1
             if len(ids) < 1:  ### if not exist [0, 1, 0]
+                # 说明没有笔划的分割点，这个时候说明这个汉字就一个笔划，所以只需要从最后进行分割即可
                 ids = np.array([len(coordinates)])
                 xys_split = np.split(coordinates, ids, axis=0)[
                     :-1
@@ -93,9 +98,12 @@ def coords_render(coordinates, split, width, height, thickness, board=5):
             else:
                 xys_split = np.split(coordinates, ids, axis=0)
         else:  ### if exist [0, 0, 1]
+            # 先删除尾部的无用坐标
             remove_end = np.split(coordinates, ids, axis=0)[0]
+            # 这里是计算笔划结束的位置，由于已经删除了无用的坐标
             ids = np.where(remove_end[:, 3] == 1)[0] + 1  ### break in [0, 1, 0]
-            xys_split = np.split(remove_end, ids, axis=0)
+            # 将所有笔划分割开
+            xys_split = np.split(remove_end, ids, axis=0)[:-1]  # remove the blank list
     else:
         pass
     for stroke in xys_split:
@@ -115,7 +123,18 @@ def coords_render(coordinates, split, width, height, thickness, board=5):
         xys[1::2] = (xys[1::2] - min_y) / original_size * p_canvas_h + board_h
         xys = np.round(xys)
         draw.line(xys.tolist(), fill=0, width=thickness)
-    return canvas
+        # 对xys_split进行平移
+        stroke[:, 0] = stroke[:, 0] - min_x  # 所有 x 坐标减去 min_x
+        stroke[:, 1] = -(stroke[:, 1] - min_y)  # 所有 y 坐标减去 min_y，然后取负
+    # 将xys_split转换为np array，以便外面进行操作
+    # 这里没办法转换为np array了，因为xys_split中每一个笔划的shape不一样
+    # 计算当前汉字的平均大小，不使用上面的original_size是因为我觉得write中的size控制的应该是平均大小，而不是最大的汉字大小
+    # 到这里其实就已经把xys_split处理完了，可以直接在这里转换为list
+    return (
+        canvas,
+        [arr.tolist() for arr in xys_split],
+        (max_x - min_x + max_y - min_y) / 2,
+    )
 
 
 # fix random seeds for reproducibility
