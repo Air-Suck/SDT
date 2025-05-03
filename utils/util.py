@@ -125,9 +125,8 @@ def coords_render(coordinates, split, width, height, thickness, board=5):
         draw.line(xys.tolist(), fill=0, width=thickness)
         # 对xys_split进行平移，使x都为正数，y上下对称
         stroke[:, 0] = stroke[:, 0] - min_x  # 所有 x 坐标减去 min_x
-        stroke[:, 1] = -(
-            stroke[:, 1] - max_y / 2 - min_y / 2
-        )  # 所有 y 坐标减去 min_y（都变为正数），然后再向下平移一半做到上下对称，然后取负进行镜像翻转
+        # 所有 y 坐标减去 min_y（都变为正数），然后再向下平移一半做到上下对称，然后取负进行镜像翻转
+        stroke[:, 1] = stroke[:, 1] - max_y / 2 - min_y / 2
     # 将xys_split转换为np array，以便外面进行操作
     # 这里没办法转换为np array了，因为xys_split中每一个笔划的shape不一样
     # 计算当前汉字的平均大小，不使用上面的original_size是因为我觉得write中的size控制的应该是平均大小，而不是最大的汉字大小

@@ -50,6 +50,7 @@ def main(opt):
     model.eval()
 
     """setup the dataloader"""
+    overall_average_size = 0
     batch_samples = len(test_loader)
     data_iter = iter(test_loader)
     with torch.no_grad():
@@ -70,6 +71,7 @@ def main(opt):
 
             # 计算平均大小
             total_size = 0
+            # 一批数据只有64个
             total_count = len(preds)
             for i, _ in enumerate(preds):
                 # 平移坐标。如果在这里做坐标平移的话会导致绘图错误，可能是coords_render函数中对坐标进行了修改
@@ -107,11 +109,13 @@ def main(opt):
                 except:
                     print("error. %s, %s" % (coord_save_path, char[i]))
                 # 仅保存十张图片用于调试
-                if i == 10:
-                    break
+                # if i == 10:
+                #     break
             # 这里也设置为10，因为只生成了十个汉字
-            overall_average_size = total_size / 10
-            break
+            overall_average_size += total_size / total_count
+            # break
+        # 再除以数据批次数量才能得到最终的平均值
+        overall_average_size /= batch_samples
     # 将平均大小返回，在makefile中接收或者直接在这里保存到json中也行
     print("Average size of generated characters: ", overall_average_size)
     # 将平均值保存到json中
@@ -131,11 +135,12 @@ def main(opt):
         data["SDT"] = {}  # 初始化为一个空字典
     data["SDT"]["sdt_size"] = overall_average_size
     # 将数据保存的路径信息也给到json文件中，主要用于调试
+    # 路径信息是相对于SDT文件夹而言的，所以需要加上SDT
     data["SDT"]["sdt_coord_path"] = os.path.join(
-        opt.save_dir, "sdt_coord"
+        "SDT", opt.save_dir, "sdt_coord"
     )  # 保存坐标的路径
     data["SDT"]["sdt_graph_path"] = os.path.join(
-        opt.save_dir, "sdt_graph"
+        "SDT", opt.save_dir, "sdt_graph"
     )  # 保存图片的路径
     # 将更新后的数据写回 JSON 文件
     with open(json_path, "w") as f:
