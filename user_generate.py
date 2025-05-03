@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from parse_config import cfg, cfg_from_file, assert_and_infer_cfg
 import torch
 from data_loader.loader import UserDataset
@@ -30,7 +31,8 @@ def main(opt):
         num_workers=cfg.DATA_LOADER.NUM_THREADS,
     )
     # 保证了输出目录存在
-    os.makedirs(os.path.join(opt.save_dir), exist_ok=True)
+    os.makedirs(os.path.join(opt.save_dir, "sdt_coord"), exist_ok=True)
+    os.makedirs(os.path.join(opt.save_dir, "sdt_graph"), exist_ok=True)
 
     """build model architecture"""
     model = SDT_Generator(
@@ -72,7 +74,12 @@ def main(opt):
             for i, _ in enumerate(preds):
                 # 平移坐标。如果在这里做坐标平移的话会导致绘图错误，可能是coords_render函数中对坐标进行了修改
                 """Render the character images by connecting the coordinates"""
-                save_path = os.path.join(opt.save_dir, char[i] + ".txt")
+                coord_save_path = os.path.join(
+                    opt.save_dir, "sdt_coord", char[i] + ".txt"
+                )
+                graph_save_path = os.path.join(
+                    opt.save_dir, "sdt_graph", char[i] + ".png"
+                )
                 # 这里面会对坐标修改以得到绘图的坐标点，所以我不能使用这个函数
                 # 还必须有这个函数，不然得到的坐标点全是乱的。。。
                 # 一定要有这个函数是因为这里面将相对坐标转换为了绝对坐标
@@ -88,17 +95,17 @@ def main(opt):
                 )
                 # print("the coordinates are:", coords)
                 # 同时保存图片
-                sk_pil.save(save_path.replace(".txt", ".png"))
+                sk_pil.save(graph_save_path)
                 # 计算绝对坐标
                 ################################################
                 total_size += average_size
                 ################################################
                 try:
                     # 将所有的坐标都保存到output中
-                    with open(save_path, "w") as f:
+                    with open(coord_save_path, "w") as f:
                         f.write(str(coords))
                 except:
-                    print("error. %s, %s" % (save_path, char[i]))
+                    print("error. %s, %s" % (coord_save_path, char[i]))
                 # 仅保存十张图片用于调试
                 if i == 10:
                     break
@@ -107,7 +114,32 @@ def main(opt):
             break
     # 将平均大小返回，在makefile中接收或者直接在这里保存到json中也行
     print("Average size of generated characters: ", overall_average_size)
-    return overall_average_size
+    # 将平均值保存到json中
+    # 读取书写配置文件之后增加sdt average_size
+    # 将平均值保存到 JSON 文件中
+    json_path = os.path.join("../config", "write.json")  # 指定 JSON 文件路径
+    if os.path.exists(json_path):
+        # 如果 JSON 文件存在，读取内容
+        with open(json_path, "r") as f:
+            data = json.load(f)
+    else:
+        # 如果 JSON 文件不存在，直接报错，提示使用make init创建该json文件
+        raise FileNotFoundError(
+            f"JSON file '{json_path}' does not exist. Please create it using 'make init'."
+        )
+    if "SDT" not in data:
+        data["SDT"] = {}  # 初始化为一个空字典
+    data["SDT"]["sdt_size"] = overall_average_size
+    # 将数据保存的路径信息也给到json文件中，主要用于调试
+    data["SDT"]["sdt_coord_path"] = os.path.join(
+        opt.save_dir, "sdt_coord"
+    )  # 保存坐标的路径
+    data["SDT"]["sdt_graph_path"] = os.path.join(
+        opt.save_dir, "sdt_graph"
+    )  # 保存图片的路径
+    # 将更新后的数据写回 JSON 文件
+    with open(json_path, "w") as f:
+        json.dump(data, f, indent=4)
 
 
 if __name__ == "__main__":
@@ -140,4 +172,6 @@ if __name__ == "__main__":
         help="dir of style samples",
     )
     opt = parser.parse_args()
+    # 将平均值传递出去
+    # 不选择传递了，而是选择使用json文件进行保存
     main(opt)
